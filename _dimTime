@@ -1,0 +1,56 @@
+// Power Query Time Table generator
+// Created By: Szilárd Kántor szilard.kantor@gmail.com
+let
+    /* Parameters */
+    needMinutes = true, 
+    needSeconds = true, 
+
+    /* Translate */
+    after_midnight = "After Midnight", 
+    early_morning  = "Early Morning", 
+    morning        = "Morning", 
+    afternoon      = "Afternoon", 
+    evening        = "Evening", 
+    night          = "Night", 
+    
+    /* Generator */
+    Generator = if needMinutes and needSeconds then List.Times(#time(0,0,0),24*60*60,#duration(0,0,0,1))
+                                               else if needMinutes then List.Times(#time(0,0,0),24*60,#duration(0,0,1,0))
+                                                                   else List.Times(#time(0,0,0),24,#duration(0,1,0,0)),
+    #"Converted To Table" = Table.FromList(Generator, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    #"Renamed Columns - Time" = Table.RenameColumns(#"Converted To Table",{{"Column1", "Time"}}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Renamed Columns - Time",{{"Time", type time}}),
+    #"Added Index - TimeKey" = Table.AddIndexColumn(#"Changed Type", "TimeKey", 0, 1, Int64.Type),
+    #"Insert Hour" = Table.AddColumn(#"Added Index - TimeKey", "Hour", each Time.Hour([Time]), Int64.Type),
+    #"Inster Hour Time" = Table.AddColumn(#"Insert Hour", "Hour Time", each #time([Hour],0,0), type time),
+    #"Insert Hour 12H" = Table.AddColumn(#"Inster Hour Time", "Hour 12H", each if [Hour]>12 then #time([Hour]-12,0,0) else #time([Hour],0,0), type time),
+    #"Insert AM/PM" = Table.AddColumn(#"Insert Hour 12H", "AM/PM", each if [Hour] < 12 then "AM" else "PM", type text),
+    #"Insert Start of Hour" = Table.AddColumn(#"Insert AM/PM", "Start of Hour", each Time.StartOfHour([Time]), type time),
+    #"Insert End of Hour" = Table.AddColumn(#"Insert Start of Hour", "End of Hour", each Time.EndOfHour([Time]), type time),
+    #"Insert Period of Day" = Table.AddColumn(#"Insert End of Hour", "Period of Day", each if [Hour] <  4 then after_midnight else 
+                                                                                     if [Hour] <  8 then early_morning else 
+                                                                                     if [Hour] < 12 then morning else 
+                                                                                     if [Hour] < 16 then afternoon else 
+                                                                                     if [Hour] < 20 then evening else 
+                                                                                                         night, type text),
+    #"Insert Hour 12 Bin" = Table.AddColumn(#"Insert Period of Day", "Hour 12 Bin", each Number.IntegerDivide([Hour], 12), Int64.Type),
+    #"Insert Hour 8 Bin" = Table.AddColumn(#"Insert Hour 12 Bin", "Hour 8 Bin", each Number.IntegerDivide([Hour], 8), Int64.Type),
+    #"Insert Hour 6 Bin" = Table.AddColumn(#"Insert Hour 8 Bin", "Hour 6 Bin", each Number.IntegerDivide([Hour], 6), Int64.Type),
+    #"Insert Hour 4 Bin" = Table.AddColumn(#"Insert Hour 6 Bin", "Hour 4 Bin", each Number.IntegerDivide([Hour], 4), Int64.Type),
+    #"Insert Hour 3 Bin" = Table.AddColumn(#"Insert Hour 4 Bin", "Hour 3 Bin", each Number.IntegerDivide([Hour], 3), Int64.Type),
+    #"Insert Hour 2 Bin" = Table.AddColumn(#"Insert Hour 3 Bin", "Hour 2 Bin", each Number.IntegerDivide([Hour], 2), Int64.Type),
+
+    #"Insert Minute" = Table.AddColumn(#"Insert Hour 2 Bin", "Minute", each Time.Minute([Time]), Int64.Type),
+    #"Insert Minute Time" = Table.AddColumn(#"Insert Minute", "Minute Time", each #time([Hour],[Minute],0), type time),
+    #"Insert Minute 30 Bin" = Table.AddColumn(#"Insert Minute Time", "Minute 30 Bin", each Number.IntegerDivide([Minute], 30), Int64.Type),
+    #"Insert Minute 20 Bin" = Table.AddColumn(#"Insert Minute 30 Bin", "Minute 20 Bin", each Number.IntegerDivide([Minute], 20), Int64.Type),
+    #"Insert Minute 15 Bin" = Table.AddColumn(#"Insert Minute 20 Bin", "Minute 15 Bin", each Number.IntegerDivide([Minute], 15), Int64.Type),
+    #"Insert Minute 12 Bin" = Table.AddColumn(#"Insert Minute 15 Bin", "Minute 12 Bin", each Number.IntegerDivide([Minute], 12), Int64.Type),
+    #"Insert Minute 10 Bin" = Table.AddColumn(#"Insert Minute 12 Bin", "Minute 10 Bin", each Number.IntegerDivide([Minute], 10), Int64.Type),
+    #"Insert Minute 5 Bin" = Table.AddColumn(#"Insert Minute 10 Bin", "Minute 5 Bin", each Number.IntegerDivide([Minute], 5), Int64.Type),
+
+    #"If Minutes needed" = if needMinutes then #"Insert Minute 5 Bin" else #"Insert Hour 2 Bin",
+
+    #"Insert Second if needed" = if needSeconds then Table.AddColumn(#"If Minutes needed", "Second", each Time.Second([Time]), type number) else #"If Minutes needed"
+in
+    #"Insert Second if needed"
